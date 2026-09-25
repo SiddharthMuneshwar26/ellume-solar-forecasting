@@ -1,0 +1,457 @@
+
+==============================================================================
+1. TIMESTAMPS - train
+==============================================================================
+rows: 12978
+timestamp string formats: {'ISO': 12589, 'DD-MM-YYYY HH:MM': 389}
+  examples of non-ISO strings: ['01-01-2024 02:00', '02-01-2024 16:00', '08-01-2024 06:00']
+  first field > 12 in 207 rows -> format is day-first
+unparsed timestamps: 0
+out-of-order rows (ts earlier than previous row): 1
+  row 12813: 2025-06-30 23:00:00 -> 2024-06-10 00:00:00
+duplicated timestamps: 72 rows over 36 distinct hours (36 surplus rows)
+  duplicate hours whose rows DISAGREE on some value: 12
+  columns that disagree (count of hours): {'ac_power_kw': 12}
+  duplicate hours where one copy is ISO and the other DD-MM: 3
+  -> reports/train_duplicates.csv
+expected hours 2024-01-01 00:00 .. 2025-06-30 23:00: 13128; distinct present: 12942
+missing hours: 186; hours outside expected range: 0
+  gap length distribution: {1: 133, 2: 1, 3: 1, 48: 1}
+  gaps longer than 1 h:
+    2024-05-12 20:00:00 .. 2024-05-12 21:00:00  (2 h)
+    2025-01-20 00:00:00 .. 2025-01-21 23:00:00  (48 h)
+    2025-02-05 01:00:00 .. 2025-02-05 03:00:00  (3 h)
+  missing hours by hour-of-day: {0: 9, 1: 10, 2: 9, 3: 12, 4: 3, 5: 5, 6: 8, 7: 8, 8: 6, 9: 6, 10: 5, 11: 5, 12: 9, 13: 9, 14: 9, 15: 5, 16: 9, 17: 10, 18: 11, 19: 8, 20: 8, 21: 10, 22: 7, 23: 5}
+  -> reports/train_gaps.csv
+
+==============================================================================
+1. TIMESTAMPS - test
+==============================================================================
+rows: 1488
+timestamp string formats: {'ISO': 1488}
+unparsed timestamps: 0
+out-of-order rows (ts earlier than previous row): 0
+duplicated timestamps: 0 rows over 0 distinct hours (0 surplus rows)
+expected hours 2025-07-01 00:00 .. 2025-08-31 23:00: 1488; distinct present: 1488
+missing hours: 0; hours outside expected range: 0
+
+==============================================================================
+2. STATUS
+==============================================================================
+raw values (repr, so whitespace is visible):
+  'RUN'          5692
+  'STANDBY'      5358
+  'run'          459
+  '<NaN>'        432
+  'standby'      373
+  ' RUN '        172
+  ' STANDBY '    161
+  'PARTIAL'      130
+  'STOP'         111
+  ' run '        15
+  'partial'      13
+  ' standby '    11
+  ' PARTIAL '    6
+  'stop'         6
+  ' STOP '       3
+normalised (strip + upper): {'RUN': 6338, 'STANDBY': 5903, nan: 432, 'PARTIAL': 149, 'STOP': 120}
+                n  day_share  mean_kw  median_kw  mean_poa  power_nan
+status_norm                                                          
+<NaN>         432       0.55  2405.87       0.13    348.31        242
+PARTIAL       149       0.50  2094.14     124.89    286.16          0
+RUN          6338       0.98  4832.94    5109.66    529.58          0
+STANDBY      5903       0.00     0.35      -2.28     15.79          0
+STOP          120       0.57   -11.63      -2.21    196.10          0
+  -> reports/status_summary.csv
+STANDBY while sun > 10 deg: 0
+RUN while sun < -5 deg: 0
+STOP / PARTIAL by month:
+status_norm  PARTIAL  STOP
+ts                        
+2024-03           24     0
+2024-08            0   116
+2024-09           70     0
+2024-11            7     0
+2025-02           47     0
+2025-05            1     4
+STOP rows with daytime power > 100 kW: 0 of 58 daytime STOP rows
+STOP episodes: 5; longest: 49 h
+  -> reports/status_stop_runs.csv
+NaN status rows: 432; of which power NaN: 242; daytime: 212
+
+==============================================================================
+3. AC_POWER_KW
+==============================================================================
+count    12700.00
+mean      2472.52
+std       3421.97
+min       -999.00
+25%         -2.29
+50%          3.53
+75%       5279.38
+max      26905.99
+NaN: 242
+exact sentinel -999.0: 67
+exact sentinel 9999.0: 0
+negative (non-sentinel): 3370  night: 3285  day(el>0): 85  day(el>10): 33
+  negative range: -11.50 .. -1.50 kW; night-time median -6.53 kW (inverter/transformer standby draw)
+  daytime negatives (el>10):
+                 ts  elevation  measured_poa_wm2 status  ac_power_kw
+2024-08-12 07:00:00      18.78            137.60   STOP        -4.29
+2024-08-12 11:00:00      76.46            639.70   STOP        -7.95
+2024-08-12 12:00:00      88.79            621.30   STOP        -6.97
+2024-08-12 15:00:00      45.51            389.90   STOP        -6.15
+2024-08-12 17:00:00      16.80            156.80   stop        -5.49
+2024-08-13 09:00:00      47.51            242.90   stop        -2.30
+2024-08-13 10:00:00      61.99            371.20   STOP       -10.83
+2024-08-13 11:00:00      76.50            472.30  STOP        -11.22
+2024-08-13 12:00:00      88.89            607.80   STOP        -7.44
+2024-08-13 15:00:00      45.43            421.60   STOP        -5.49
+2024-08-13 16:00:00      31.02            319.10   STOP        -9.54
+2024-08-13 17:00:00      16.70            154.20   STOP        -3.44
+2024-08-14 07:00:00      18.75            144.80   STOP        -8.90
+2024-08-14 08:00:00      33.09            275.70   STOP        -3.96
+2024-08-14 10:00:00      62.02            377.10   STOP        -9.64
+2024-08-14 12:00:00      88.91            492.60   STOP       -10.86
+2024-08-14 13:00:00      74.37            569.90   STOP        -8.16
+2024-08-14 15:00:00      45.36            362.20   stop        -5.57
+2024-08-14 16:00:00      30.93            246.70   STOP        -9.04
+2024-08-15 08:00:00      33.10            296.70   STOP        -3.17
+2024-08-15 09:00:00      47.54            422.40   STOP        -2.24
+2024-08-15 10:00:00      62.05            452.70   STOP       -10.81
+2024-08-15 13:00:00      74.31            664.50   STOP        -2.18
+2024-08-15 14:00:00      59.78            513.10   STOP        -9.58
+2024-08-15 17:00:00      16.49            151.60   STOP        -3.53
+2024-08-16 07:00:00      18.74            138.50   STOP        -2.34
+2024-08-16 08:00:00      33.10            214.20   STOP        -3.03
+2024-08-16 10:00:00      62.07            396.00   STOP        -9.61
+2024-08-16 11:00:00      76.61            395.00    NaN       -10.09
+2024-08-16 15:00:00      45.19            276.10   STOP        -2.31
+2024-08-16 16:00:00      30.74            258.10   STOP        -5.29
+2025-05-14 13:00:00      71.96            886.60   STOP        -9.05
+2025-05-14 14:00:00      57.88            738.00    NaN        -4.51
+> 10000 kW: 29
+  10000-10100 kW (marginal overshoot at clipping): 16
+  > 10100 kW (impossible spikes): 13
+                 ts  measured_poa_wm2 status  prev_kw  ac_power_kw  next_kw
+2024-04-08 13:00:00             939.5    RUN   8856.0      22496.7   6289.4
+2024-06-02 08:00:00             390.9    RUN   1959.6      11462.6   5514.4
+2024-06-08 09:00:00             503.7    RUN   3716.0      15833.2   5658.9
+2024-06-23 15:00:00             513.4    RUN   6827.6      16746.0   3845.0
+2024-06-28 09:00:00             496.6    run   4050.0      14034.0   6304.2
+2024-07-04 11:00:00             753.7    run   6965.7      21531.9   8509.2
+2024-08-11 09:00:00             568.2    RUN   3369.8      17018.3   6070.5
+2024-08-18 15:00:00             534.5    RUN   6386.4      12863.5   4128.8
+2024-09-14 10:00:00             824.8    RUN   7247.3      19938.7   9382.4
+2024-09-22 09:00:00             642.0    RUN   5050.8      20854.3   8316.6
+2025-01-19 12:00:00             896.4    RUN   9068.2      21489.0   8993.3
+2025-02-23 12:00:00            1001.5    RUN   9176.1      26906.0   9192.7
+2025-06-01 11:00:00             822.2    RUN   7795.5      22680.5   9398.0
+  -> reports/power_over_rating.csv
+night rows (sun el<0 at mid-hour): 6369
+  |power|<=0.01: 2698; negative: 3285; positive>1 kW: 249; >50 kW: 113; >500 kW: 24
+  night >50 kW by type: {'twilight (el>-8)': 91, 'deep night': 22}
+  -> reports/power_night_positive.csv
+flatline runs (identical non-zero value, >=3 consecutive hours): 1
+     start                 end  hours  value_kw  daylight_hours  night_hours
+2024-09-18 2024-09-19 23:00:00     48   2187.44              22           24
+  -> reports/power_flatlines.csv
+upper tail by month (kW-regime daylight values, spikes >10100 excluded):
+          max_kw      p99  n_within_0p5pct_of_max  n_ge_9900  n_9500_9900
+month                                                                    
+2024-01   9558.5   9470.4                       2          0            2
+2024-02   9718.5   9653.8                       2          0           17
+2024-03  10040.5  10006.6                      11         24           54
+2024-04   9972.0   9872.4                       1          3           16
+2024-05   9951.4   9732.3                       1          1           12
+2024-06   9570.1   9120.2                       1          0            1
+2024-07   9657.7   9348.6                       1          0            1
+2024-08   9235.4   8828.0                       2          0            0
+2024-09   9973.0   9827.9                       2          2            9
+2024-10  10038.5   9996.8                       4         12           18
+2024-11   9694.4   9564.0                       1          0            9
+2024-12   9228.6   9106.0                       2          0            0
+2025-01   9526.6   9469.2                       1          0            1
+2025-02   9729.6   9638.6                       3          0           11
+2025-03  10066.1  10021.5                       4         16           42
+2025-04   9982.8   9809.7                       2          2           16
+2025-05   9633.0   9513.5                       1          0            4
+2025-06   9471.0   9398.8                       2          0            0
+  -> reports/power_ceiling_by_month.csv
+most common daily maxima (rounded to 1 kW): {9385.0: 3, 9578.0: 3, 9972.0: 3, 9339.0: 2, 9357.0: 2, 9423.0: 2, 9558.0: 2, 9371.0: 2}
+  -> reports/power_upper_tail.png
+days with max POA > 300 W/m2 but 0 < max power < 50 kW, status not STOP (candidate MW-unit days): 26
+  contiguous date blocks:
+    2024-07-14 .. 2024-08-08  (26 days)
+  median (daily max power / daily max POA): suspect days 0.01084, normal days 10.047 -> ratio 927x (1000x => MW)
+  -> reports/power_daily_max.csv
+  hourly: 281 hours with 0.001 < power/POA < 0.05 (kW regime is ~10); first 2024-07-14 07:00:00, last 2024-08-08 17:00:00
+  kW-regime hours (power/POA 1..20) with POA>=100 inside that window: 0
+  -> reports/power_mw_unit_hours.csv
+power vs expected power (RUN hours) - a cap below 10 MW would flatten the upper bins:
+                count     25%     50%     75%      max
+bin                                                   
+(8500, 9000]    428.0  8613.0  8859.0  9049.0   9632.0
+(9000, 9500]    445.0  9106.0  9276.0  9479.0  10001.0
+(9500, 10000]   192.0  9472.0  9669.0  9897.0  10041.0
+(10000, 10500]   22.0  9731.0  9897.0  9978.0  10066.0
+(10500, 11000]    1.0  2339.0  2339.0  2339.0   2339.0
+  by month (hours with expected >= 8.5 MW):
+           n  power_max  actual_over_expected
+ts                                           
+2024-01   85    9558.50                 1.022
+2024-02   81    9718.52                 0.989
+2024-03  100   10040.51                 1.015
+2024-04   92    9971.96                 0.982
+2024-05   69    9951.40                 1.021
+2024-06   13    9570.14                 0.996
+2024-07   10    9657.67                 1.026
+2024-08    3    9235.41                 1.014
+2024-09   20    9973.00                 1.040
+2024-10   70   10038.51                 1.031
+2024-11   48    9694.36                 1.015
+2024-12   75    9228.56                 0.980
+2025-01   66    9526.58                 1.008
+2025-02   74    9729.62                 0.992
+2025-03  114   10066.11                 1.005
+2025-04   89    9982.84                 0.986
+2025-05   56    9632.97                 1.004
+2025-06   23    9471.02                 1.017
+  -> reports/power_ceiling_vs_expected.csv
+hours with POA>300 and 0<power<30 kW: 218; months: {Period('2024-07', 'M'): 151, Period('2024-08', 'M'): 67}
+hours with POA>300 and |power|<1 kW (outage/curtailment): 39; status: {'STOP': 21, 'STANDBY': 18}
+  -> reports/power_timeseries_log.png
+
+==============================================================================
+4. DIURNAL PROFILE BY MONTH (hour-beginning slots)
+==============================================================================
+  -> reports/diurnal_power_by_month.csv
+peak slot and energy-weighted centroid (hours, slot midpoint = h+0.5) vs clear-sky POA:
+         peak_slot  power_centroid_h  measured_poa_centroid_h  clearsky_poa_centroid_h  power_minus_clearsky_min  poa_minus_clearsky_min  power_minus_poa_min
+month                                                                                                                                                        
+2024-01         12             12.48                    12.49                    12.50                     -1.40                   -0.38                -1.02
+2024-02         12             12.56                    12.58                    12.58                     -0.81                    0.29                -1.10
+2024-03         12             12.47                    12.50                    12.49                     -0.87                    0.43                -1.30
+2024-04         12             12.34                    12.36                    12.35                     -0.93                    0.29                -1.22
+2024-05         12             12.29                    12.30                    12.29                      0.02                    0.38                -0.36
+2024-06         12             12.34                    12.35                    12.36                     -1.19                   -0.42                -0.77
+2024-07         12             12.43                    12.47                    12.44                     -1.10                    1.67                -2.77
+2024-08         12             12.43                    12.37                    12.41                      0.92                   -2.60                 3.52
+2024-09         12             12.23                    12.27                    12.27                     -2.09                   -0.06                -2.03
+2024-10         12             12.11                    12.12                    12.12                     -0.62                    0.31                -0.93
+2024-11         12             12.09                    12.11                    12.10                     -0.51                    0.95                -1.46
+2024-12         12             12.27                    12.28                    12.27                     -0.19                    0.56                -0.75
+2025-01         12             12.46                    12.49                    12.50                     -2.73                   -0.71                -2.02
+2025-02         12             12.55                    12.57                    12.58                     -1.36                   -0.17                -1.19
+2025-03         12             12.48                    12.50                    12.49                     -0.75                    0.54                -1.29
+2025-04         12             12.35                    12.36                    12.35                     -0.51                    0.56                -1.07
+2025-05         12             12.28                    12.30                    12.29                     -1.03                    0.27                -1.30
+2025-06         12             12.35                    12.36                    12.36                     -0.71                    0.42                -1.13
+  -> reports/diurnal_shift_by_month.csv
+months flagged (peak slot != 12 or |centroid shift| > 20 min): none
+  -> reports/diurnal_shift_by_day.csv
+daily power-centroid offset vs clear-sky: median -1.0 min, IQR -1.7..0.0 min
+single days with |power-clearsky| > 20 min or |power-POA| > 15 min:
+            power   poa  clearsky  daily_kwh  power_shift_min  poa_shift_min  power_vs_poa_min
+date                                                                                          
+2024-01-20   12.5  12.8      12.5    64082.2             -2.4           13.3             -15.7
+2024-03-02   12.5  12.2      12.5    71616.4             -1.5          -18.7              17.2
+2024-03-13   12.5  12.2      12.5    71667.8             -0.6          -17.5              16.9
+2024-05-07   12.5  12.3      12.3    74924.9             14.4           -1.6              16.0
+2024-05-08   12.3  11.9      12.3    70404.5             -1.8          -21.0              19.2
+2024-06-12   12.5  12.2      12.3    46542.0              6.8           -9.3              16.2
+2024-06-18   12.3  12.6      12.4    30575.8             -5.2           11.2             -16.4
+2024-06-20   12.0  12.4      12.4    31528.4            -20.1           -0.3             -19.9
+2024-08-27   12.2  12.5      12.4    49831.4            -10.4            7.5             -17.8
+2024-08-31   12.7  12.8      12.4    43449.7             22.2           24.0              -1.9
+2024-09-10   12.3  12.6      12.3    39700.8             -1.0           18.4             -19.3
+2024-09-19   12.0  12.3      12.2    26249.3            -14.9            1.6             -16.6
+2024-11-19   11.8  12.0      12.0    37010.3            -16.8            1.0             -17.8
+2024-12-22   12.3  12.0      12.3    60027.4             -0.2          -16.7              16.4
+2025-01-03   12.1  12.4      12.4    66258.3            -21.7           -0.2             -21.5
+2025-03-18   12.5  12.8      12.5    71389.1              0.7           16.6             -15.8
+2025-05-03   12.3  12.0      12.3    67039.0             -1.0          -16.2              15.1
+2025-05-22   12.2  11.9      12.3    62066.8             -5.4          -24.8              19.4
+2025-06-07   12.1  12.4      12.3    53670.9            -11.2            7.1             -18.3
+2025-06-11   12.2  11.9      12.3    59862.0             -8.1          -26.3              18.2
+2025-06-30   12.9  12.9      12.4    43567.2             30.7           31.9              -1.2
+no multi-day period with power centroid > 30 min away from POA centroid
+  -> reports/diurnal_profiles_by_month.png
+  -> reports/diurnal_shift_by_day.png
+
+==============================================================================
+5. SENSOR SANITY
+==============================================================================
+measured_poa_wm2: NaN 237, -999 22, 9999 29, range(non-sentinel) 0.00 .. 1058.10
+measured_module_temp_c: NaN 241, -999 39, 9999 0, range(non-sentinel) 8.94 .. 58.51
+measured_ambient_temp_c: NaN 242, -999 26, 9999 0, range(non-sentinel) 9.63 .. 39.53
+rainfall_mm: NaN 0, -999 0, 9999 0, range(non-sentinel) 0.00 .. 29.10
+POA at night (el<-2): n=6270, ==0: 5943, !=0: 212, >5: 106, <0: 0
+  night POA > 5 W/m2 values: {412.6: 31, 7.2: 4, 8.5: 4, 8.8: 3, 9.8: 2, 7.3: 2, 5.7: 2, 6.0: 2, 8.3: 2, 11.5: 2}
+  median night POA by month: {Period('2024-01', 'M'): 0.0, Period('2024-02', 'M'): 0.0, Period('2024-03', 'M'): 0.0, Period('2024-04', 'M'): 0.0, Period('2024-05', 'M'): 0.0, Period('2024-06', 'M'): 0.0, Period('2024-07', 'M'): 0.0, Period('2024-08', 'M'): 0.0, Period('2024-09', 'M'): 0.0, Period('2024-10', 'M'): 0.0, Period('2024-11', 'M'): 0.0, Period('2024-12', 'M'): 0.0, Period('2025-01', 'M'): 0.0, Period('2025-02', 'M'): 0.0, Period('2025-03', 'M'): 0.0, Period('2025-04', 'M'): 0.0, Period('2025-05', 'M'): 0.0, Period('2025-06', 'M'): 0.0}
+negative POA any time: 0
+measured_poa_wm2 flatlines (>=3 h identical, non-zero): 3
+              start                 end  hours  value  daylight_hours
+2024-08-25 00:00:00 2024-08-25 20:00:00     21  412.6              11
+2024-08-25 22:00:00 2024-08-26 01:00:00      4  412.6               0
+2024-08-26 03:00:00 2024-08-27 23:00:00     45  412.6              22
+  -> reports/sensor_flatlines_measured_poa_wm2.csv
+measured_module_temp_c flatlines (>=3 h identical): 0
+  -> reports/sensor_flatlines_measured_module_temp_c.csv
+measured_ambient_temp_c flatlines (>=3 h identical): 0
+  -> reports/sensor_flatlines_measured_ambient_temp_c.csv
+daylight POA > 1.3 x clear-sky POA: 20; > 1.5x: 6
+daylight POA == 0 with clear-sky > 300: 0
+midday (el>40, POA>600) rows: 2715; module-ambient median 16.1 C
+  module temp BELOW ambient at midday: 0; below by >5 C: 0
+  monthly median module-ambient at midday: {Period('2024-01', 'M'): 18.7, Period('2024-02', 'M'): 18.4, Period('2024-03', 'M'): 17.7, Period('2024-04', 'M'): 15.5, Period('2024-05', 'M'): 14.4, Period('2024-06', 'M'): 10.6, Period('2024-07', 'M'): 10.0, Period('2024-08', 'M'): 10.4, Period('2024-09', 'M'): 14.3, Period('2024-10', 'M'): 16.1, Period('2024-11', 'M'): 17.5, Period('2024-12', 'M'): 18.0, Period('2025-01', 'M'): 18.4, Period('2025-02', 'M'): 18.0, Period('2025-03', 'M'): 16.4, Period('2025-04', 'M'): 16.5, Period('2025-05', 'M'): 14.8, Period('2025-06', 'M'): 11.5}
+measured ambient - forecast temp: mean -0.05, std 1.03, |diff|>10 C: 0
+rainfall: hours >0: 326, max 29.1 mm, negative 0
+  monthly total mm: {Period('2024-01', 'M'): 0.0, Period('2024-02', 'M'): 0.0, Period('2024-03', 'M'): 0.0, Period('2024-04', 'M'): 0.0, Period('2024-05', 'M'): 0.0, Period('2024-06', 'M'): 117.0, Period('2024-07', 'M'): 252.0, Period('2024-08', 'M'): 152.0, Period('2024-09', 'M'): 165.0, Period('2024-10', 'M'): 51.0, Period('2024-11', 'M'): 56.0, Period('2024-12', 'M'): 0.0, Period('2025-01', 'M'): 0.0, Period('2025-02', 'M'): 0.0, Period('2025-03', 'M'): 0.0, Period('2025-04', 'M'): 0.0, Period('2025-05', 'M'): 22.0, Period('2025-06', 'M'): 132.0}
+  -> reports/sensor_sanity.png
+
+==============================================================================
+6. AC POWER / MEASURED POA RATIO (soiling, degradation)
+==============================================================================
+hours used: 2895 (RUN, 400<=POA<=1300, 1000<=P<=9000)
+ratio kW/(W/m2): median 10.166; temp-corrected median 10.807 (nameplate 12.5 kWp -> 12.5 kW per W/m2 at STC; implied PR 0.86)
+  -> reports/ratio_daily.csv
+monthly median temp-corrected ratio: {Period('2024-01', 'M'): 10.963, Period('2024-02', 'M'): 10.514, Period('2024-03', 'M'): 10.79, Period('2024-04', 'M'): 10.476, Period('2024-05', 'M'): 10.901, Period('2024-06', 'M'): 11.036, Period('2024-07', 'M'): 10.972, Period('2024-08', 'M'): 11.145, Period('2024-09', 'M'): 11.066, Period('2024-10', 'M'): 11.05, Period('2024-11', 'M'): 10.926, Period('2024-12', 'M'): 10.554, Period('2025-01', 'M'): 10.915, Period('2025-02', 'M'): 10.504, Period('2025-03', 'M'): 10.657, Period('2025-04', 'M'): 10.49, Period('2025-05', 'M'): 10.875, Period('2025-06', 'M'): 11.031}
+linear trend of daily temp-corrected ratio: -0.033 per year = -0.30 %/yr
+  month 01: 2024 10.963 -> 2025 10.915  (-0.4 %)
+  month 02: 2024 10.514 -> 2025 10.504  (-0.1 %)
+  month 03: 2024 10.790 -> 2025 10.657  (-1.2 %)
+  month 04: 2024 10.476 -> 2025 10.490  (+0.1 %)
+  month 05: 2024 10.901 -> 2025 10.875  (-0.2 %)
+  month 06: 2024 11.036 -> 2025 11.031  (-0.0 %)
+days where 5-day median ratio jumps up by > 0.25: 8
+  2024-03-01  jump +0.44  rain in prior 7 days 0.0 mm
+  2024-05-01  jump +0.70  rain in prior 7 days 0.0 mm
+  2024-06-07  jump +0.25  rain in prior 7 days 14.9 mm
+  2024-08-25  jump +1.16  rain in prior 7 days 63.4 mm
+  2025-01-07  jump +0.36  rain in prior 7 days 0.0 mm
+  2025-03-09  jump +0.49  rain in prior 7 days 0.0 mm
+  2025-05-09  jump +0.30  rain in prior 7 days 0.0 mm
+  2025-05-22  jump +0.29  rain in prior 7 days 0.0 mm
+dry-spell (no rain > 2 mm) segments >= 10 days, ratio slope:
+     start        end  days  slope_per_day  pct_per_day
+2024-01-01 2024-06-06   157        -0.0008      -0.0072
+2024-07-03 2024-07-13    11        -0.0249      -0.2267
+2024-10-10 2024-11-04    24        -0.0071      -0.0643
+2024-11-08 2025-05-23   188        -0.0009      -0.0088
+2025-05-25 2025-06-06    12        -0.0143      -0.1305
+  -> reports/ratio_dry_spell_slopes.csv
+  -> reports/ratio_over_time.png
+
+==============================================================================
+7. FORECAST COLUMNS
+==============================================================================
+(min/max/mean/std computed with -999 sentinels excluded)
+                                 n  nulls  sentinel_m999     min      max    mean     std  below_phys  above_phys  n_unique  max_decimals
+file  col                                                                                                                                
+train forecast_cloud_cover   12942      0              0   0.002    0.992   0.380   0.266           0           0       986             3
+      forecast_temp_c        12942      0              0   7.900   40.600  25.022   5.197           0           0       298             1
+      forecast_wind_ms       12942      0             13   0.490   13.770   4.076   1.722           0           0       933             2
+      forecast_humidity_pct  12942      0              0  13.000  100.000  55.973  19.518           0           0        88             0
+test  forecast_cloud_cover    1488      1              0   0.104    0.996   0.796   0.179           0           0       516             3
+      forecast_temp_c         1488      4              5  15.300   30.000  23.725   2.610           0           0       131             1
+      forecast_wind_ms        1488      6              0   2.450   12.390   5.836   1.606           0           0       569             2
+      forecast_humidity_pct   1488      3              0  56.000  100.000  84.326   9.968           0           0        44             0
+  -> reports/forecast_ranges.csv
+train: rows with a NaN or -999 in a forecast column: 13
+                     forecast_cloud_cover  forecast_temp_c  forecast_wind_ms  forecast_humidity_pct
+ts                                                                                                 
+2024-02-06 12:00:00                 0.277             29.0            -999.0                   34.0
+2024-03-23 19:00:00                 0.045             34.3            -999.0                   38.0
+2024-03-24 08:00:00                 0.050             29.1            -999.0                   39.0
+2024-04-02 05:00:00                 0.070             23.0            -999.0                   57.0
+2024-05-12 19:00:00                 0.368             33.1            -999.0                   53.0
+2024-06-03 19:00:00                 0.356             28.0            -999.0                   60.0
+2024-07-01 16:00:00                 0.689             27.4            -999.0                   65.0
+2024-09-25 14:00:00                 0.686             23.1            -999.0                   68.0
+2024-09-26 10:00:00                 0.761             21.7            -999.0                   69.0
+2025-01-26 13:00:00                 0.106             29.9            -999.0                   31.0
+2025-03-10 20:00:00                 0.179             27.4            -999.0                   29.0
+2025-03-16 14:00:00                 0.536             33.8            -999.0                   25.0
+2025-06-26 07:00:00                 0.882             26.5            -999.0                   90.0
+  -> reports/forecast_bad_values_train.csv
+test: rows with a NaN or -999 in a forecast column: 19
+                     forecast_cloud_cover  forecast_temp_c  forecast_wind_ms  forecast_humidity_pct
+ts                                                                                                 
+2025-07-07 03:00:00                 0.926             18.7               NaN                   96.0
+2025-07-09 11:00:00                 0.813           -999.0              8.04                   78.0
+2025-07-11 01:00:00                 0.961              NaN              4.94                   94.0
+2025-07-17 06:00:00                 0.944           -999.0              6.40                   95.0
+2025-07-20 02:00:00                 0.887             22.5              5.29                    NaN
+2025-07-25 07:00:00                 0.788             25.8               NaN                   79.0
+2025-07-30 06:00:00                 0.976           -999.0              5.30                   89.0
+2025-07-30 18:00:00                 0.918             25.3              6.20                    NaN
+2025-08-01 00:00:00                 0.953              NaN              7.86                   97.0
+2025-08-07 14:00:00                 0.979             24.3              6.74                    NaN
+2025-08-09 10:00:00                 0.879             23.7               NaN                   74.0
+2025-08-14 04:00:00                 0.629           -999.0              3.33                   90.0
+2025-08-20 01:00:00                 0.897             18.4               NaN                   98.0
+2025-08-20 17:00:00                 0.905           -999.0              6.86                   73.0
+2025-08-21 08:00:00                 0.584             20.8               NaN                   79.0
+2025-08-22 06:00:00                   NaN             20.1              3.69                   87.0
+2025-08-22 09:00:00                 0.721              NaN              4.29                   81.0
+2025-08-25 09:00:00                 0.541             24.6               NaN                   71.0
+2025-08-26 18:00:00                 0.422              NaN              5.70                   74.0
+  -> reports/forecast_bad_values_test.csv
+interpolation check (on de-duplicated, hourly-contiguous series):
+  train forecast_cloud_cover     2nd-diff~0:   1.4%   unchanged vs prev hour:   0.7%   mean|d1| by hour max/min:  2.2 (peak hour 0)
+  train forecast_temp_c          2nd-diff~0:  17.2%   unchanged vs prev hour:   2.9%   mean|d1| by hour max/min:  4.9 (peak hour 0)
+  train forecast_wind_ms         2nd-diff~0:   1.8%   unchanged vs prev hour:   0.9%   mean|d1| by hour max/min:  2.7 (peak hour 0)
+  train forecast_humidity_pct    2nd-diff~0:  28.7%   unchanged vs prev hour:  11.1%   mean|d1| by hour max/min:  2.7 (peak hour 0)
+  test  forecast_cloud_cover     2nd-diff~0:   2.4%   unchanged vs prev hour:   1.3%   mean|d1| by hour max/min:  2.4 (peak hour 0)
+  test  forecast_temp_c          2nd-diff~0:  17.3%   unchanged vs prev hour:   5.8%   mean|d1| by hour max/min:  4.4 (peak hour 0)
+  test  forecast_wind_ms         2nd-diff~0:   1.1%   unchanged vs prev hour:   0.5%   mean|d1| by hour max/min:  2.6 (peak hour 0)
+  test  forecast_humidity_pct    2nd-diff~0:  34.7%   unchanged vs prev hour:  16.0%   mean|d1| by hour max/min:  4.2 (peak hour 0)
+share of hours lying on a straight line with neighbours, by hour-of-day (train):
+                         0     1     2     3     4     5     6     7     8     9     10    11    12    13    14    15    16    17    18    19    20    21    22    23
+forecast_cloud_cover   0.00  0.01  0.02  0.02  0.01  0.01  0.02  0.01  0.01  0.02  0.02  0.01  0.01  0.01  0.02  0.01  0.03  0.01  0.02  0.01  0.01  0.01  0.01  0.01
+forecast_temp_c        0.08  0.19  0.18  0.16  0.16  0.17  0.17  0.21  0.18  0.20  0.20  0.18  0.17  0.18  0.16  0.16  0.17  0.19  0.16  0.21  0.16  0.19  0.18  0.08
+forecast_wind_ms       0.01  0.01  0.03  0.02  0.03  0.01  0.01  0.03  0.02  0.01  0.02  0.02  0.02  0.02  0.01  0.01  0.02  0.01  0.02  0.01  0.01  0.03  0.02  0.01
+forecast_humidity_pct  0.17  0.32  0.30  0.29  0.30  0.29  0.28  0.27  0.31  0.29  0.33  0.32  0.31  0.32  0.29  0.29  0.28  0.29  0.29  0.31  0.28  0.30  0.31  0.16
+  -> reports/forecast_linear_share_by_hour.csv
+  -> reports/forecast_mean_abs_hourly_change_by_hour.csv
+mean |hour-to-hour change| by hour-of-day (train; row h = change from h-1 to h):
+    forecast_cloud_cover  forecast_temp_c  forecast_wind_ms  forecast_humidity_pct
+0                  0.125            1.675             0.877                  5.051
+1                  0.065            0.875             0.344                  2.400
+2                  0.062            0.593             0.342                  2.177
+3                  0.065            0.339             0.353                  1.879
+4                  0.065            0.389             0.346                  2.028
+5                  0.059            0.641             0.338                  2.118
+6                  0.061            0.946             0.336                  2.575
+7                  0.066            1.281             0.348                  2.809
+8                  0.066            1.395             0.324                  3.460
+9                  0.067            1.479             0.347                  3.311
+10                 0.063            1.304             0.433                  3.212
+11                 0.064            1.239             0.434                  3.115
+12                 0.064            1.046             0.450                  2.832
+13                 0.062            0.797             0.467                  2.467
+14                 0.064            0.531             0.445                  2.186
+15                 0.064            0.361             0.439                  2.015
+16                 0.062            0.382             0.429                  1.942
+17                 0.064            0.594             0.421                  2.208
+18                 0.061            0.849             0.451                  2.534
+19                 0.062            1.081             0.440                  3.000
+20                 0.062            1.256             0.426                  3.206
+21                 0.066            1.355             0.403                  3.147
+22                 0.058            1.496             0.345                  3.425
+23                 0.066            1.389             0.345                  3.289
+lag (h) maximising correlation between forecast and on-site measurement (positive = forecast lags):
+  temp vs ambient                best lag +0 h (r=0.980); r at lag 0 = 0.980
+  cloud vs (1 - POA/clearsky)    best lag +0 h (r=0.671); r at lag 0 = 0.671
+  monthly best lag forecast_temp vs measured ambient: {'2024-01': 0, '2024-02': 0, '2024-03': 0, '2024-04': 0, '2024-05': 0, '2024-06': 0, '2024-07': 0, '2024-08': 0, '2024-09': 0, '2024-10': 0, '2024-11': 0, '2024-12': 0, '2025-01': 0, '2025-02': 0, '2025-03': 0, '2025-04': 0, '2025-05': 0, '2025-06': 0}
+  corr(forecast cloud, measured clearness) daylight: -0.671
+train Jul-Aug 2024 vs test Jul-Aug 2025:
+                       train Jul-Aug 2024 mean  test Jul-Aug 2025 mean  train Jul-Aug 2024 std  test Jul-Aug 2025 std
+forecast_cloud_cover                     0.698                   0.796                   0.185                  0.179
+forecast_temp_c                         23.403                  23.725                   2.507                  2.610
+forecast_wind_ms                         6.213                   5.836                   1.656                  1.606
+forecast_humidity_pct                   83.761                  84.326                   9.593                  9.968
+  -> reports/forecast_train_vs_test.csv
+  -> reports/forecast_timeseries.png
+  -> reports/forecast_week_zoom.png

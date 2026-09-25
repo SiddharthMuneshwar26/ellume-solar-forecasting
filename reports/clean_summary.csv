@@ -1,0 +1,14 @@
+item,count
+raw rows in train.csv,12978
+rows after duplicate resolution,12942
+"missing hours (left missing, rule 10)",186
+train_ok = True,12290
+train_ok = False,652
+  excl_stop,120
+  excl_partial,149
+  excl_power_nan,382
+  excl_day_standby,0
+  excl_nan_status_low,2
+  rows with >1 reason,1
+suspect_outage (kept),0
+train_ok & daylight (el>0),6199

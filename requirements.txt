@@ -1,0 +1,9 @@
+# Direct dependencies (pinned). Created with Python 3.12.10.
+pandas==3.0.6
+numpy==2.5.3
+pvlib==0.15.2
+lightgbm==4.7.0
+scikit-learn==1.9.1
+matplotlib==3.11.2
+pyarrow==25.0.1  # parquet I/O only (data/train_clean.parquet)
+ipykernel==7.3.0  # notebook kernel for notebooks/walkthrough.ipynb only; not used by the pipeline

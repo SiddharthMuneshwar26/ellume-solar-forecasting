@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Solar Forecast Approach Note</title>
+<style>
+  @page { size: A4; margin: 11mm 13mm 11mm 13mm; }
+  :root { --ink:#1d1d1f; --muted:#5a5a60; --rule:#d4d4d8; --accent:#9b2c2c; --shade:#f4f4f5; }
+  html { background:#fff; }
+  body { font-family: "Segoe UI", Calibri, Arial, sans-serif; font-size: 9.2pt; line-height: 1.3;
+         color: var(--ink); background:#fff; margin: 0; }
+  h1 { font-size: 17pt; margin: 0 0 2pt 0; letter-spacing: -0.2pt; }
+  .sub { color: var(--muted); font-size: 9.4pt; margin-bottom: 8pt; }
+  h2 { font-size: 12pt; margin: 12pt 0 4pt 0; padding-bottom: 2pt; border-bottom: 1px solid var(--rule);
+       break-after: avoid; }
+  h3 { font-size: 10pt; margin: 8pt 0 2pt 0; break-after: avoid; }
+  p { margin: 0 0 5pt 0; }
+  ul, ol { margin: 0 0 5pt 0; padding-left: 16pt; }
+  li { margin-bottom: 1.5pt; }
+  table { border-collapse: collapse; width: 100%; margin: 3pt 0 7pt 0; font-size: 8.6pt; }
+  tr { break-inside: avoid; }
+  td.w { white-space: normal !important; }
+  th, td { border-bottom: 1px solid var(--rule); padding: 2pt 4pt; text-align: left; vertical-align: top; }
+  th { background: var(--shade); font-weight: 600; }
+  td.n, th.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tr.hl td { font-weight: 600; }
+  figure { margin: 5pt 0 8pt 0; break-inside: avoid; text-align: center; }
+  figure img { max-width: 100%; }
+  figcaption { font-size: 8.4pt; color: var(--muted); text-align: left; margin-top: 2pt; }
+  .box { border-left: 3px solid var(--accent); background: #faf6f6; padding: 4pt 8pt; margin: 5pt 0 7pt 0; break-inside: avoid; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 8.6pt; background: var(--shade); padding: 0 2pt; }
+  .tag { font-size: 7.8pt; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .3pt; }
+  .small { font-size: 8.5pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Day-ahead solar forecast: approach note</h1>
+<div class="sub">Ellume take-home · 10 MW AC / 12.5 MWp DC fixed-tilt PV, Tumakuru, Karnataka · test period 1 Jul – 31 Aug 2025</div>
+
+<p>This note is about how I got to the submitted model and how I checked it. Every number here comes from files in the
+project (<code>experiments/results/</code>, <code>reports/</code>, <code>NOTES.md</code>), or I recomputed it from them for this note.
+I say which validation each number comes from, because partway through I found leakage in my first validation and
+replaced it (section 7).</p>
+
+<h2>1. Problem and constraints</h2>
+<p>Every afternoon the plant has to declare tomorrow's hourly AC export. At that point all I have is the timestamp and
+four day-ahead forecast columns: cloud cover, air temperature, wind and humidity. The training file also contains
+measured plane-of-array irradiance (POA), module and ambient temperature, rainfall, SCADA status and AC power. None of
+those exist for tomorrow, so I only use them to clean the data, calibrate physical parameters on history, and diagnose errors.
+I never use them as model inputs, and <code>src/features.py</code> asserts that no <code>measured_*</code>, <code>rainfall</code>,
+<code>status</code> or <code>ac_power*</code> column gets into the feature matrix.</p>
+<p>What makes the test period hard is that it is monsoon. Forecast cloud over Jul–Aug 2025 daylight hours averages 0.80,
+against 0.70 in Jul–Aug 2024, and 77 % of test daylight hours are forecast at ≥ 0.7 cloud. Only one monsoon exists in training,
+and 26 days of it were logged in the wrong unit. So every modelling choice came down to one question: what happens when
+the model has to extrapolate into heavy, uncertain cloud?</p>
+
+<h2>2. Data audit and cleaning</h2>
+<p><code>train.csv</code> is described as an unprocessed historian export, so before any modelling I ran a read-only audit
+(<code>src/audit.py</code>), and then wrote numbered cleaning rules (<code>src/clean.py</code>). Each rule logs how many rows
+it touched. Rows are never silently deleted: bad values become NaN and unusable hours get a flag (<code>train_ok = False</code>).</p>
+<table>
+<tr><th style="width:40%">Issue found</th><th class="n" style="width:17%">Count</th><th>What I did</th></tr>
+<tr><td>Two timestamp formats (ISO and day-first <code>DD-MM-YYYY HH:MM</code>)</td><td class="n">12,589 / 389</td><td>Parse both. 207 rows have a first field &gt; 12, which proves the second format is day-first.</td></tr>
+<tr><td>Appended block: 2024-06-10 00:00 – 06-16 23:00 placed after 2025-06-30</td><td class="n">165 rows</td><td>These hours don't appear anywhere else, so the data is misplaced, not duplicated. Sort.</td></tr>
+<tr><td>Duplicated hours (72 rows)</td><td class="n">36 h</td><td>24 identical. 12 differ, <em>only</em> in power: 2 kept the copy within 10 % of expected, 5 used the mean, 3 night → 0, 2 → NaN.</td></tr>
+<tr><td>Missing hours (incl. 48 h on 2025-01-20/21)</td><td class="n">186</td><td>Left missing. No target imputation.</td></tr>
+<tr><td>Sentinels −999 / 9999</td><td class="n w">power 67, POA 52, T<sub>mod</sub> 39, T<sub>amb</sub> 26, wind 14</td><td>→ NaN per column (counted before de-duplication). Test has 19 rows with bad forecast values, which get filled (section 6).</td></tr>
+<tr><td>Power logged in MW: 2024-07-14 06:00 → 2024-08-08 18:00</td><td class="n">333 values</td><td>Training: positive values ×1000. Validation: excluded, not rescaled.</td></tr>
+<tr><td>Impossible spikes 11.5–26.9 MW / marginal overshoot 10.0–10.07 MW</td><td class="n">13 / 16</td><td>Spikes → NaN. Overshoot clipped to 10,000.</td></tr>
+<tr><td>Flatlines: power 2,187.44 kW for 48 h (2024-09-18/19); POA 412.6 W/m² for 70 h (2024-08-25..27)</td><td class="n">48 / 70</td><td>Power → NaN. For the POA flatline only POA → NaN, and power is kept.</td></tr>
+<tr><td>Rule 11: power / expected &gt; 1.5 with POA &gt; 100 W/m²</td><td class="n">10</td><td>→ NaN (added later, see below).</td></tr>
+<tr><td>Night-time negative power (standby draw)</td><td class="n">3,282</td><td>→ 0 in the training target.</td></tr>
+<tr><td>Messy status strings; STOP / PARTIAL / missing</td><td class="n w">1,219 changed; 120 / 149 / 432</td><td>Normalised. STOP, PARTIAL and NaN-power hours flagged out of training.</td></tr>
+</table>
+<p>After cleaning: 12,942 rows, of which 12,290 are <code>train_ok</code> (6,199 in daylight).</p>
+
+<p><b>How I caught the MW interval.</b> On a log-scale time series of power (Fig. 1) a block of daytime values sits about
+1,000× below everything else. On the 26 affected days, the median of daily max power / daily max POA is 0.0108, against 10.05 on
+normal days (927×). Of the 282 daylight hours in the window with POA ≥ 100, 281 read between 0 and 50. Outside the window, only 2
+non-STOP hours do. I only multiplied <em>positive</em> values, because the
+night-time negatives inside the window are still kW-sized (−1.5 to −11.5 kW, the usual standby draw). Rescaling them would
+have created −10 MW readings. After the fix, median power/POA inside the window is 10.80, which matches the clean-panel
+monsoon level.</p>
+<figure><img src="approach_note_figures/fig1_mw_window.png" style="width:74%">
+<figcaption><b>Fig. 1</b> Raw <code>ac_power_kw</code>, log scale (non-positive values drawn at the 0.1 floor). The band at 1–10 in Jul–Aug 2024
+is the MW-logged interval. This is the one monsoon period in training, so if I had missed it, a model would have learned that monsoon
+days produce almost nothing.</figcaption></figure>
+
+<p><b>Other judgement calls.</b></p>
+<ul>
+<li><b>Stuck POA, valid power.</b> During the 412.6 W/m² flatline, power follows a normal diurnal curve. Only the pyranometer
+is frozen. POA only feeds calibration and diagnostics, while power is the target. So I masked POA and kept those power rows,
+rather than throwing away 70 hours of good target data.</li>
+<li><b>Duplicates.</b> I asserted that the copies agree on every column except power (they do). Where the power values
+differ, I resolved them against expected power from measured POA and module temperature, <code>10.8 × POA × (1 − 0.0035(T − 25))</code>.
+If neither copy was within 10 % in daylight, I set the hour to NaN rather than guess.</li>
+<li><b>Rule 11 came late, and I want to be open about it.</b> On my original folds, the single worst hour was
+2025-06-07 07:00: 5,325 kW at 192 W/m², when the physics allows about 2.1 MW. Rule 5 only catches values above the rating.
+Before writing a rule I listed every candidate (<code>reports/ratio_spikes.csv</code>). There are 10 isolated hours with
+ratio 2.0–3.0 (the 99th percentile is about 1.08), and none of them is a copy of a neighbouring hour. So they are not a simple timestamp slip.
+I chose the POA &gt; 100 threshold on physical grounds, because POA &gt; 200 would have missed the triggering case. I did find this
+through the error analysis, which is exactly why the final validation excludes such rows rather than repairing them.</li>
+<li><b>Corrected versus excluded.</b> I <em>corrected</em> things with an unambiguous fix: formats, order, sentinels, MW scaling,
+night negatives. I <em>excluded</em> hours where the true value is unknowable (flatlines, spikes, conflicting duplicates) and
+availability events (STOP, PARTIAL). A weather forecast can't predict an outage, so training on outages teaches noise,
+and scoring on them measures the outage, not the forecast.</li>
+</ul>
+
+<h2>3. Understanding the plant: soiling</h2>
+<p>Temperature-corrected power/POA (RUN hours, POA 400–1300, 1–9 MW) shows a clear sawtooth (Fig. 2). In the dry season the
+ratio decays about 0.08–0.15 %/day, roughly 5–8 % per cycle. It then jumps back 4–7 % on days <em>with no rain</em>:
+2024-03-01, 2024-05-01, 2025-01-07, 2025-03-09 and 2025-05-09. These look like manual cleanings roughly every two months.
+From June to October the ratio stays flat and high (median about 11.1), which is consistent with rain keeping the panels clean. Degradation
+(a trend of −0.30 %/yr) is negligible over the test horizon.</p>
+<figure><img src="approach_note_figures/fig2_soiling.png" style="width:64%">
+<figcaption><b>Fig. 2</b> Daily median power/POA with daily rainfall below. The step-ups in the dry season fall on dry days (cleaning),
+and the ratio stays flat through the monsoon. The spike near 2024-08-25 is the frozen pyranometer, and the lows in mid-Sep 2024 are PARTIAL days.</figcaption></figure>
+<p>This matters because the test months fall in the clean state. A model trained on raw power learns, on average, a partly
+soiled plant. So in production I built a soiling-corrected target: <code>ac_power_clean = min(ac_power_kw / soiling_factor, 10000)</code>.
+The factor is a 7-day <em>centred</em> rolling median of the daily ratio, divided by the Jun–Oct median of the whole file (11.087),
+then time-interpolated and capped at 1 (range 0.926–1.000; Jul 0.997, Aug 1.000). As a description of history it works. As an input
+to validation it is a problem: the value on any day depends on the next few days and on a baseline computed from months that may come
+after the validation window. Section 7 covers this.</p>
+
+<h2>4. Model progression: how I arrived at the final approach</h2>
+<p class="small">The comparisons in this section were run on my <b>original</b> folds (<code>src/validate.py</code>: F1 = train ≤ Jun 2024 /
+test Jul–Aug 2024; F2 = same test with all other data as training; F3–F8 = one month each, Jan–Jun 2025). I made my model
+choices with these folds, so I report them as the record of <em>how</em> I decided. They are not performance estimates, because that validation
+turned out to leak (section 7). MAE is % of 10 MW on daylight <code>train_ok</code> hours against <code>ac_power_kw</code>.</p>
+<table>
+<tr><th>Step</th><th>What it is</th><th class="n">F1 / F2 MAE %</th><th>What I learned</th><th>Kept?</th></tr>
+<tr><td>B0</td><td>Month × hour climatology</td><td class="n">7.43 / 7.13</td><td>A floor. It can't tell a clear day from a monsoon day.</td><td>Benchmark</td></tr>
+<tr><td>B1</td><td>Ineichen clear sky → POA → power, no cloud</td><td class="n">10.26 / 9.77</td><td>Best in clear hours (1.6 %), 13.8 % in overcast hours. All the monsoon skill has to come from the cloud mapping.</td><td>No</td></tr>
+<tr><td>B2a</td><td>+ Kasten-Czeplak cloud factor (a = 0.75, b = 3.4)</td><td class="n">4.98 / 5.12</td><td>The textbook curve attenuates too hard for this noisy forecast.</td><td>No</td></tr>
+<tr><td>B2b</td><td>+ cloud curve <code>1 − a·C<sup>b</sup></code> fitted to measured clearness</td><td class="n">4.38 / 4.06*</td><td>Fitted a ≈ 0.56–0.63: full forecast overcast removes only 56–63 % of clear sky.</td><td>Yes</td></tr>
+<tr><td>M1</td><td>LightGBM on power, monotone decreasing in cloud</td><td class="n">4.57 / 4.64</td><td>Worse than physics. Biased low (−113 / −186 kW) and weak in clear hours.</td><td>No</td></tr>
+<tr><td>M2</td><td>LightGBM on the ratio power / B2b</td><td class="n">4.10 / 4.05</td><td>Best single model, and it removes most of B2b's over-prediction.</td><td>Yes</td></tr>
+<tr><td>M3</td><td>LightGBM on the residual power − B2b</td><td class="n">4.33 / 4.12</td><td>Anchored like M2, but behind it on both monsoon folds.</td><td>No</td></tr>
+<tr><td>BL50</td><td>0.5·B2b + 0.5·M2 (fixed config)</td><td class="n">3.92 / 3.86†</td><td>Lowest monsoon error, because the two components' errors partly cancel.</td><td>Final</td></tr>
+</table>
+<p class="small">* B2b with <code>fitted_dry</code> turbidity. From <code>reports/model_comparison.csv</code>. The M1 row is the raw-target variant (M1_clean: 4.66 / 4.44). The M2 and M3 rows are the soiling-corrected-target variants (M2_kw 4.19 / 4.18, M3_kw 4.23 / 4.25). † After rule 11, from <code>reports/final_choice_stdout.txt</code> (BL50 was also scored on F8, June 2025: 3.84).</p>
+
+<p><b>Why plain LightGBM struggled.</b> F1 has no monsoon months in training, and M1 came out biased low there. My reading
+is that the trees can't extrapolate, so M1 predicted monsoon days from the nearest leaves it had. Even in F2, which <em>does</em> see other monsoon months, it was biased low (−186 kW).
+Adding monotone constraints on the cloud features didn't fix it, which suggests the problem is the target level rather than the direction of the cloud effect.</p>
+<p><b>Why the ratio formulation helped.</b> M2 learns a multiplicative correction to a physics forecast. The idea is that in conditions it
+hasn't seen, the trees can only return ratios they learned on history, so the prediction stays tied to physics instead of to the training mean. A
+multiplicative correction also scales with irradiance: a 10 % optimism at midday is the same leaf as a 10 % optimism at 08:00.
+M3 (the additive residual) loses that property. It lost to M2 on both monsoon folds and was marginally behind on the dry folds (1.82 vs 1.80 %), so I rejected it.
+Below 200 kW of physics power the ratio is unstable, so M2 returns plain physics there.</p>
+<p><b>Why a blend, and why fixed.</b> On the monsoon folds B2b over-predicted (+208 kW) and M2 under-predicted (−113 kW), and the
+blend's bias was +47 kW. The gain was largest in partly cloudy hours. Before running the comparison I wrote down a decision rule:
+pick the <em>simplest</em> model within 0.1 pp of the best monsoon mean, in the order B2b &lt; BL50 &lt; BL_cloud (cloud-dependent
+weights) &lt; M2. BL50 was the best, at 3.87 against 3.95 for BL_cloud, and it has no fitted weights. I kept the equal weighting because
+fitting weights on three monsoon months would have been fitting to noise.</p>
+<p><b>Freezing the hyperparameters.</b> Originally M2 chose leaves ∈ {15, 31} and rounds by early stopping on the last 20 % of each
+fold's training period. In the original (pre-rule-11) tuning run the chosen iterations were 258, 84, 1381, 705, 1317, 115, 75 and 332 across the eight folds. A spread that
+wide says the inner validation was noisy, not that the folds need different models. So I froze 15 leaves and 295 rounds (the median),
+and averaged five seeds (42–46) to damp bagging noise. In the post-rule-11 re-run the fixed config was within ±0.12 pp of the tuned one on every fold, with no
+systematic sign. It is also deterministic, so <code>predictions.csv</code> is reproducible byte-for-byte.</p>
+
+<h2>5. Final physics model (B2b, <code>src/solar.py</code>)</h2>
+<ol>
+<li><b>Geometry:</b> pvlib solar position at the <em>hour mid-point</em> (timestamps are hour-beginning IST). I checked alignment
+first: the energy-weighted centroid of power against clear sky is within −2.7 to +0.9 min in every month. Also apparent zenith,
+absolute airmass at 680 m, and extraterrestrial DNI.</li>
+<li><b>Clear sky:</b> Ineichen with a monthly Linke turbidity (TL). For each month I take the clearest 10 % of training days
+(at least 3) by measured/default-clear-sky POA. Then I grid-search TL from 1.5 to 8.0 against measured POA on those days' hours with sun &gt; 20°.
+<b>Only non-monsoon months are fitted</b> (<code>fitted_dry</code>). Jun–Sep use pvlib's climatological TL × the mean fitted/default
+ratio, which is 1.202 on the full training set (Jun 5.89, Jul 6.07, Aug 6.31, Sep 5.95). The reason: when I fitted every month, August came
+out at 8.0, the grid ceiling. A monsoon month has no genuinely clear days, so TL was soaking up cloud. Worse, that value had never been
+validated, because in F1/F2 Jul–Aug were outside training and only the fallback path was ever exercised. <code>fitted_dry</code> makes the
+submitted model use exactly the path that was tested.</li>
+<li><b>Cloud attenuation:</b> <code>GHI = GHI<sub>cs</sub> · (1 − a·C<sup>b</sup>)</code>. a and b are grid-fitted by least squares to measured
+clearness <code>POA<sub>meas</sub>/POA<sub>cs</sub></code> (clipped to 1.2) on training hours with sun &gt; 10°. Production: a = 0.56, b = 4.4.
+Across the validation folds: a = 0.56–0.63, b = 4.3–5.3. I fit on POA clearness but apply the factor to GHI before decomposition.
+At 15° tilt the two ratios are close, but it is an approximation.</li>
+<li><b>POA:</b> Erbs decomposition of the all-sky GHI into DNI/DHI, then Hay-Davies transposition to 15° tilt, 180° azimuth, albedo 0.2.</li>
+<li><b>Temperature:</b> Faiman cell temperature (pvlib defaults u0 = 25, u1 = 6.84) from <em>forecast</em> air temperature, forecast wind
+and the modelled POA, then <code>1 − 0.0035·(T<sub>cell</sub> − 25)</code>.</li>
+<li><b>Loss factor:</b> <code>P = 12,500 · POA/1000 · f<sub>T</sub> · L</code>. L = Σ actual / Σ model over training hours that are
+<code>train_ok</code>, sun &gt; 15°, measured clearness ≥ 0.8, forecast cloud ≤ 0.3 and power &lt; 9,500 kW (unclipped). So L is calibrated only
+where the forecast and the sky agreed it was clear. It absorbs everything I don't model explicitly: inverter, wiring, mismatch and residual soiling.</li>
+<li><b>Constraints:</b> clip to [0, 10,000] kW (the inverter rating). Zero when the sun is below the horizon at mid-hour.</li>
+</ol>
+<p>Only three things are fitted: TL, (a, b) and L. They are nearly identical across folds (L = 0.855–0.863 in validation),
+which is part of why I trust this model as the anchor.</p>
+
+<h2>6. Final ML correction and blend</h2>
+<ul>
+<li><b>Target:</b> <code>y / B2b</code> on training hours that are <code>train_ok</code>, in daylight, with finite y and B2b ≥ 200 kW.
+In <b>production</b> y = <code>ac_power_clean</code> (5,688 rows) and the B2b it divides by is refitted on the same data.</li>
+<li><b>Features (17):</b> forecast cloud, temperature, wind and RH. Cloud smoothed ±1 h and ±2 h <em>within the calendar day</em>,
+because the audit showed a jump about 2× larger at midnight, where a new forecast issue starts. Daily mean daylight cloud. Sun elevation,
+azimuth and cos(AOI). B2b's clear-sky POA, all-sky POA, cell temperature and power. Hour, plus sin/cos of day-of-year. I added no year
+or trend features, because the test period is outside the training range.</li>
+<li><b>LightGBM:</b> regression, learning rate 0.03, 15 leaves, 295 rounds, min_child_samples 20, feature_fraction 0.9, bagging 0.8
+every iteration, λ<sub>2</sub> = 1, <code>deterministic=True</code>. Seeds 42–46 are trained separately and their ratios averaged.</li>
+<li><b>Prediction:</b> <code>M2 = B2b · max(ratio, 0)</code> where B2b ≥ 200 kW, else B2b. Then <b>BL50 = 0.5 × B2b + 0.5 × M2</b>, set to 0 at
+night and clipped to [0, 10,000].</li>
+<li><b>Forecast gaps</b> (19 test rows): same-day time interpolation, then the same hour on the adjacent day, then nearest value in the day.
+Only one test row needed the adjacent-day step, 2025-08-01 00:00 (temperature), and that hour is at night, so it is predicted 0 either way.</li>
+</ul>
+<p>I kept the blend for observed reasons, not on the principle that ensembles are good. B2b and M2 fail differently. B2b is best in clear
+hours and systematically optimistic in partly cloudy and overcast ones. M2 removes most of that optimism, but it is a tree model trained
+on one monsoon. Averaging trades a little clear-sky accuracy for lower bias and lower variance where the test period actually is.
+The leakage-safe results (section 8) back the blend up modestly: BL50 is never the worst of the three in any fold. They don't make it a big win,
+though. Pooled, it beats M2 alone by only about 7 kW.</p>
+
+<h2>7. Leakage investigation and fix</h2>
+<p>After I had frozen the model, I re-read my own validation code, asking of every line: <em>could this number have known anything
+from after the forecast was issued?</em> Several could.</p>
+<table>
+<tr><th style="width:44%">Problem in the original validation</th><th>Fix in <code>experiments/leakage_safe_validation.py</code></th></tr>
+<tr><td><code>clean.py</code> ran on the whole file <em>before</em> the folds were cut.</td><td>Raw rows are cut at the fold boundary first. Cleaning and fitting run on each training slice only. The script asserts <code>max(train ts) &lt; min(validation ts)</code> and that the two sets are disjoint.</td></tr>
+<tr><td>The soiling factor uses a <em>centred</em> 7-day median (3 days of future), a Jun–Oct baseline over all data (for F1 this included its own validation months), and interpolation/back-fill.</td><td>No soiling correction at all, because I could not build one without future data. The training target is row-cleaned <code>ac_power_kw</code>.</td></tr>
+<tr><td>Physical parameters were fitted per fold. TL and (a, b) use measured POA, but the loss factor L (and M2) were fitted against the leaked <code>ac_power_clean</code>.</td><td><code>FoldPhysics</code> fits TL (<code>fitted_dry</code>), a and b on the fold's training rows, and L against the raw-based target, then freezes them.</td></tr>
+<tr><td>Old F2 trained on Jan–Jun 2024 <em>plus</em> Sep 2024 – Jun 2025 to predict Jul–Aug 2024 (already labelled "optimistic").</td><td>Six strictly forward folds. Each trains on everything from 2024-01-01 up to the cutoff and validates on the next two months.</td></tr>
+<tr><td>Forecast gap filling could borrow the <em>next</em> day's forecast.</td><td>Same-day interpolation only. 7 wind entries were filled across all folds, and no rows were dropped.</td></tr>
+<tr><td>Scoring used rewritten targets: MW hours rescaled, duplicate means, <code>ac_power_clean</code> on the dry folds.</td><td>Scoring uses the <b>raw</b> <code>ac_power_kw</code>. Invalid hours are <em>excluded</em>, never rewritten: the MW window (605 rows in F1), conflicting duplicates, STOP/PARTIAL, missing status with low output, spikes, and the frozen logger.</td></tr>
+<tr><td>BL50 and the 295 rounds were chosen on these same folds.</td><td>Not re-tunable after the fact. The frozen config is re-measured unchanged (15 leaves, 295 rounds, seeds 42–46, the same features, the same 200 kW floor, the same blend).</td></tr>
+</table>
+<div class="box"><span class="tag">Architecture vs. training target: what the 2.744 % actually measures</span><br>
+The leakage-safe experiment re-measures the frozen <b>architecture and configuration</b> of <code>run.py</code>, but with a
+causal-compatible raw target, because the production soiling correction depends on future information. Production (and the submitted
+<code>predictions.csv</code>) trains B2b's loss factor and M2 on the soiling-corrected <code>ac_power_clean</code>. The validation trains both on
+row-cleaned raw <code>ac_power_kw</code>. You can see the effect in the fitted loss factor: 0.886 in production, against 0.855–0.863 in the folds.
+To measure the gap directly, I refitted the full production pipeline with the raw target and compared its test-period predictions with
+the submitted ones (<code>experiments/target_gap.py</code>; the production refit reproduces <code>predictions.csv</code> exactly, so the two runs
+differ only in the target). The loss factor drops from 0.886 to 0.855. Over the 806 test daylight hours, B2b is 3.5 % higher in the
+submitted model in every cloud bin, while M2 is essentially unchanged (+1 kW on average): dividing by a higher physics level is offset by a
+lower learned ratio. The submitted BL50 therefore sits 70 kW (1.8 %) above the validated variant, and 66 kW above it in the overcast bin.
+This is an output-level comparison of the two forecasts, not a measurement of test error. I think the clean target is the right one for a monsoon test period (soiling factor ≈ 1 in
+Jul–Aug). But I have <b>not measured</b> the production target under leakage-safe conditions, and given the positive bias in section 9
+it could make the submitted model more optimistic, not less. The other differences are minor: production's adjacent-day gap-fill fallback
+(one night-time test row), and night = 0 at elevation &lt; 0 against ≤ 0 in validation. I kept the clean target because it is the right
+level for a monsoon test period and the measured shift is modest. The alternative would have been changing the submitted model after
+seeing its validated bias.</div>
+<p><b>What is still not perfectly clean.</b> Some constants come from auditing the <em>whole</em> training file: the MW-window and
+flatline dates, and the 10.8 kW per W/m² expected-power coefficient used by the duplicate, spike and low-output rules. In the validation
+they only decide which rows count as valid. They never fit a model or change a scored value. Rule 11 was also found through error analysis.
+I judge the remaining effect to be small, but it isn't zero. The test period (2025-07-01 to 2025-08-31) was never read by the experiment:
+it reads only <code>train.csv</code>, and every validation window ends by 2025-06-30 23:00. For the record, the old headline of
+<b>3.87 %</b> (monsoon mean of the original F1/F2/F8) is <b>superseded</b>.</p>
+
+<h2>8. Leakage-safe validation results</h2>
+<p>I report <b>daylight</b> MAE (sun elevation &gt; 0). Night hours are 0 for every model, so they add perfect predictions: including them
+takes BL50 from 274.43 to 139.24 kW (7,420 rows) and says nothing about skill. MAE maps directly onto the energy mis-scheduled per hour.
+Pooled metrics are computed over all rows, not by averaging fold percentages. All four models are scored on identical rows.</p>
+<table>
+<tr><th>Fold</th><th>Validation window</th><th class="n">Daylight rows</th><th class="n">B0 kW (%)</th><th class="n">B2b kW (%)</th><th class="n">M2 kW (%)</th><th class="n">BL50 kW (%)</th><th class="n">BL50 bias kW</th></tr>
+<tr><td>F1</td><td>2024-07-01 – 08-31</td><td class="n">379</td><td class="n">942.0 (9.42)</td><td class="n">435.1 (4.35)</td><td class="n">442.8 (4.43)</td><td class="n"><b>431.0 (4.31)</b></td><td class="n">+83.1</td></tr>
+<tr><td>F2</td><td>2024-09-01 – 10-31</td><td class="n">595</td><td class="n">762.0 (7.62)</td><td class="n">377.6 (3.78)</td><td class="n"><b>337.8 (3.38)</b></td><td class="n">351.1 (3.51)</td><td class="n">+20.1</td></tr>
+<tr><td>F3</td><td>2024-11-01 – 12-31</td><td class="n">680</td><td class="n">527.9 (5.28)</td><td class="n"><b>301.4 (3.01)</b></td><td class="n">372.3 (3.72)</td><td class="n">320.2 (3.20)</td><td class="n">+228.8</td></tr>
+<tr><td>F4</td><td>2025-01-01 – 02-28</td><td class="n">581</td><td class="n">173.4 (1.73)</td><td class="n">199.3 (1.99)</td><td class="n"><b>136.8 (1.37)</b></td><td class="n">159.3 (1.59)</td><td class="n">+0.6</td></tr>
+<tr><td>F5</td><td>2025-03-01 – 04-30</td><td class="n">738</td><td class="n">161.5 (1.62)</td><td class="n">158.7 (1.59)</td><td class="n"><b>134.7 (1.35)</b></td><td class="n">140.9 (1.41)</td><td class="n">+38.3</td></tr>
+<tr><td>F6</td><td>2025-05-01 – 06-30</td><td class="n">723</td><td class="n">512.7 (5.13)</td><td class="n">323.5 (3.23)</td><td class="n">332.0 (3.32)</td><td class="n"><b>315.0 (3.15)</b></td><td class="n">+36.6</td></tr>
+<tr class="hl"><td>Pooled</td><td>Jul 2024 – Jun 2025</td><td class="n">3,696</td><td class="n">476.19 (4.762)</td><td class="n">287.14 (2.871)</td><td class="n">281.62 (2.816)</td><td class="n">274.43 (2.744)</td><td class="n">+68.77</td></tr>
+</table>
+<p class="small">MAE in kW, with % of 10 MW in brackets. Bold = lowest of B2b/M2/BL50 in the fold. Pooled RMSE: B0 791.6, B2b 430.2, M2 422.4, BL50 412.1 kW.
+Source: <code>experiments/results/fold_results.csv</code> and <code>model_summary.csv</code>.</p>
+<figure><img src="approach_note_figures/fig3_folds.png" style="width:70%">
+<figcaption><b>Fig. 3</b> Daylight MAE per forward fold. The pooled 2.744 % sits well below the two monsoon-season folds, which is why I
+don't treat it as the test-period number.</figcaption></figure>
+<p style="break-after: avoid">How I read it:</p>
+<ul>
+<li>All three forecast models clearly beat climatology whenever the weather varies (F1–F3, F6).</li>
+<li>In the stable dry season (F4) raw-target B2b is slightly <em>worse</em> than climatology. Its loss factor is one average level with
+no seasonal soiling term, while B0 absorbs last year's soiling for the same months. M2 appears to learn the seasonal part.</li>
+<li>F3 (Nov–Dec) is where M2 hurts: +290 kW bias against +168 kW for B2b. I haven't diagnosed this. One candidate, which I haven't verified, is that Nov–Dec is when soiling starts rebuilding
+right after the clean monsoon months that dominate the end of F3's training data.</li>
+<li>BL50 has the lowest pooled MAE and is never the worst of the three in a fold. But M2 alone wins three folds, and the pooled margin is small.</li>
+</ul>
+
+<h2>9. What to expect on the test period</h2>
+<p>The pooled 2.744 % is <b>not</b> my estimate for Jul–Aug 2025. It includes the easy dry months, and the test is cloudier than any validation
+fold. The previous estimate of about 4.2 % came from the superseded folds and I no longer use it. I re-derived it from the leakage-safe predictions:</p>
+<ol>
+<li>I joined each scored BL50 validation row to its forecast cloud and binned it (0–0.3, 0.3–0.7, ≥ 0.7).</li>
+<li>I took the test daylight distribution from <code>test.csv</code>: 806 hours with sun &gt; 0, of which 22 / 165 / 619 fall in those bins
+(2.7 / 20.5 / <b>76.8 %</b>).</li>
+<li>I re-weighted the fold's per-bin MAE and bias by the test shares.</li>
+</ol>
+<table>
+<tr><th>Basis</th><th class="n">BL50 MAE by bin (kW): clear / partly / overcast</th><th class="n">Own-mix MAE</th><th class="n">Re-weighted to test</th><th class="n">Bias at test mix</th></tr>
+<tr class="hl"><td>F1 (Jul–Aug 2024, same season)</td><td class="n">181 / 341 / 527 (n = 19 / 161 / 199)</td><td class="n">431 kW</td><td class="n">480 kW = 4.80 %</td><td class="n">+101 kW</td></tr>
+<tr><td>F1 + F2 pooled</td><td class="n">216 / 317 / 528</td><td class="n">382 kW</td><td class="n">476 kW = 4.76 %</td><td class="n">+106 kW</td></tr>
+<tr><td>F1, overcast split 0.7/0.8/0.9</td><td class="n">—</td><td class="n">—</td><td class="n">475 kW = 4.75 %</td><td class="n">+86 kW</td></tr>
+<tr><td>F6 (May–Jun 2025, monsoon onset)</td><td class="n">197 / 321 / 455</td><td class="n">315 kW</td><td class="n">420 kW = 4.20 %</td><td class="n">+92 kW</td></tr>
+</table>
+<p><b>Scenario estimate: roughly 4.8 % of 10 MW (about 475–480 kW) daylight MAE, with a slight over-prediction of about +100 kW</b>,
+for the validated raw-target variant. For example, F1: 0.027 × 181 + 0.205 × 341 + 0.768 × 527 ≈ 480 kW. The other weightings in the table
+give 4.2–4.8 % and +86 to +106 kW. Two further sub-bin variants (F2 and F6 split at 0.8/0.9) gave 5.1 % and 5.7 %, but their top bin holds only
+4 hours, so I don't lean on them. This is a spread of scenarios, not a confidence interval. Why it is only an estimate:</p>
+<ul>
+<li>F1 has only 379 scored daylight hours, because the MW window and the Aug-2024 STOP week are excluded.</li>
+<li>It assumes that error <em>given</em> forecast cloud carries over from 2024 to 2025, i.e. that the cloud forecast is equally skilful.</li>
+<li>It measures the raw-target variant. The submitted model predicts 70 kW (1.8 %) more over test daylight hours (section 7). If the
+validated variant's scenario bias of about +100 kW carries over, the submitted forecast would run roughly +170 kW high, and its MAE would
+be somewhat above the 4.8 % scenario. This is an inference: I haven't validated the production target.</li>
+<li>It covers normal-availability hours only. If Jul–Aug 2025 had an outage like the 2024 STOP week and the test is scored on raw
+export, the realised number will be worse, and no weather model could have prevented that.</li>
+</ul>
+
+<h2>10. Error analysis: where the model is weakest</h2>
+<p><b>Worst valid day: 2025-06-23 (fold F6).</b> BL50 daylight MAE was 1,143 kW over 13 scored hours. Daylight energy was 44.85 MWh
+actual against 59.71 MWh predicted, <b>+33 %</b> (B2b +35 %, M2 +31 %). <b>Worst hour of that day, 10:00:</b> actual 4,643 kW, BL50 7,026 kW
+(+2,383), forecast cloud 0.64.</p>
+<figure><img src="approach_note_figures/fig4_case_day.png" style="width:78%">
+<figcaption><b>Fig. 4</b> 2025-06-23. Left: all three models draw a near-clear day. Right: the POA implied by the forecast (dashed) against what the
+pyranometer measured. This suggests the miss sits mainly in the irradiance, not in the conversion to power. Measured POA is used here for diagnosis only.</figcaption></figure>
+<p><span class="tag">Observed</span> Status was RUN all day. For 08:00–16:00, actual power was 0.95–1.04× the expected power from measured POA,
+so the plant appears to have behaved normally. Pushing the <em>measured</em> POA through the same F6 temperature and loss steps gives 45.07 MWh, within
+<b>0.5 %</b> of actual. Forecast cloud stayed between 0.49 and 0.82. Through the fitted curve (F6: a = 0.57, b = 4.4) that implies clearness
+0.76–0.98, while measured clearness was 0.53–0.97. Over the day, forecast-implied POA was <b>36 % above</b> measured. At 10:00 it was
+695 W/m² against 428 W/m² measured.</p>
+<p><span class="tag">Interpretation</span> The measured-POA comparison suggests that the dominant error on this day was in the weather input,
+not in the power-conversion model. Blending can't help with that, because both components see the same cloud forecast and missed together. Cloud <em>cover</em> says nothing about how thick the clouds are.
+A "0.6" can be thin high cloud or a grey monsoon deck.</p>
+<p><b>The rule I wrote in advance failed.</b> Before the error analysis I set a rule: a day is "forecast wrong" if the mean
+|measured − forecast-implied clearness| over daylight exceeds 0.3. For this day it is 0.21, so the rule says "model wrong", which is the
+opposite of what the measured-POA check suggests. On the original folds no day ever reached 0.3 (max 0.22). The reason is the fitted curve
+itself: with b ≈ 4.4, clearness stays at 0.94 for cloud 0.6 and 0.88 for 0.7, and can never drop below 1 − a ≈ 0.43. The curve
+compresses the forecast into a narrow, optimistic band, so a 0.3 disagreement is almost impossible by construction. I kept the rule's
+result as recorded rather than move the threshold after seeing it, and I used the measured-POA attribution instead.</p>
+<p><b>The pattern generalises.</b> Four of the five worst days by MAE are daily-energy over-predictions of +28 to +33 %
+(2025-06-23, 2024-09-26, 2024-08-20, 2024-08-09). The fifth is the PARTIAL-affected 2024-11-19, described below. My earlier
+measured-POA attribution on the original folds classed 2024-08-20 and 2024-08-09 the same way as 2025-06-23: darker than
+forecast, with the power model within a few percent. The biggest under-prediction day in the top six is only −16 %. On F1+F2, BL50's bias
+is concentrated at midday: +156 kW for 10:00–13:00 (B2b +264, M2 +47), and about 0 in the mornings and afternoons. MAE relative to mean actual power
+is flat across the day (7.6–8.8 %). So the diurnal shape and timing are right, and the cloudy-day amplitude is optimistic.</p>
+<p><b>The worst single hour looks like an availability event, not a forecast miss.</b> 2024-11-19 13:00 (F3): actual 5,328 kW, BL50 9,012 kW (+3,684). Status is missing
+for that hour. The 12:00 row is absent, and 09:00–11:00 and 14:00–17:00 are all PARTIAL. Actual/expected is 0.63, in line with PARTIAL
+hours (median 0.64 for PARTIAL hours with POA &gt; 300). My validity mask only drops missing-status hours below 0.5 of expected, so this one slipped through.
+The evidence is consistent with partial availability rather than weather. I left it in the reported metric, because removing hours after seeing the scores is
+exactly what the new validation is meant to prevent.</p>
+
+<h2>11. Limitations and next steps</h2>
+<ul>
+<li><b>Forecast ceiling.</b> Forecast cloud correlates only r = −0.67 with measured clearness in daylight. The worst-day attributions suggest that
+much of the remaining monsoon error comes from the input.</li>
+<li><b>One monsoon.</b> Training contains a single Jul–Aug, with 26 of its 62 days logged in MW, and the test is cloudier than all of it. The
+overcast-bin error above rests on a few hundred hours.</li>
+<li><b>Availability.</b> STOP/PARTIAL events (e.g. 2024-08-12..16) can't be predicted from four weather variables. I excluded them from
+training and scoring, but a real schedule is judged on raw export.</li>
+<li><b>Temperature data looks too good.</b> Forecast vs on-site ambient: mean difference −0.05 °C, std 1.03 °C, r = 0.98. That is much better
+than I would expect from a genuine day-ahead forecast. It doesn't leak (the sensor is never an input), but it suggests the "forecast" columns may be close to an
+analysis. If so, real-world errors would be larger than validated.</li>
+<li><b>Target gap.</b> I validated the raw-target variant. The target gap is measured at +70 kW (1.8 %) on the test forecasts, but not validated. A causal soiling estimate (trailing window only, fitted inside each fold)
+would let me validate the production target properly.</li>
+<li><b>Selection history.</b> The architecture and hyperparameters were chosen on the leaky folds. The six-fold result is an honest
+re-measurement, but not an untouched hold-out.</li>
+</ul>
+<p><b>What I would do next</b> (none of this is implemented):</p>
+<ol>
+<li><b>P10/P50/P90 forecasts.</b> The errors are asymmetric: dark "partly cloudy" days produce large over-predictions. Quantile LightGBM on
+the ratio, or empirical residual quantiles by forecast-cloud bin from the leakage-safe predictions, would tell the scheduler how much
+downside a given day carries.</li>
+<li><b>Weather ensembles.</b> Ensemble spread is the missing signal that separates a confident "0.6" from an uncertain one, and more
+than one provider would add optical-depth information that cover alone lacks.</li>
+<li><b>Monsoon-specific cloud calibration.</b> Fit (a, b) by season or condition them on humidity. Then recalibrate on a rolling basis as
+2025 monsoon data comes in, since the current curve is too gentle between 0.5 and 0.8.</li>
+<li><b>Availability modelling.</b> Model a separate outage/derate probability from status history and maintenance schedules, and use
+operator-declared outages when they are known the day before.</li>
+</ol>
+
+<h2>12. Tools</h2>
+<p>I used Claude Code and a local Qwen model for coding and review assistance. I checked the resulting code, the validation logic and every reported
+number against the project artifacts.</p>
+
+</body>
+</html>

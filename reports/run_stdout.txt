@@ -1,0 +1,82 @@
+[1] parsed 12589 ISO + 389 DD-MM-YYYY timestamps; 1 ordering break(s) fixed by sorting
+[3] forecast_wind_ms: 14 sentinel(s) -> NaN
+[3] measured_poa_wm2: 52 sentinel(s) -> NaN
+[3] measured_module_temp_c: 39 sentinel(s) -> NaN
+[3] measured_ambient_temp_c: 26 sentinel(s) -> NaN
+[3] ac_power_kw: 67 sentinel(s) -> NaN
+[2] 36 duplicated hours: 24 identical copies, 2 one-copy-within-10%, 5 mean of both, 3 night -> 0, 2 set to NaN; 36 surplus rows removed (12978 -> 12942)
+[2]     2024-01-30 15:00:00  copies [6042.72, 5666.59]  expected 6247.7  -> mean 5854.66 (both within 10 %)
+[2]     2024-03-01 13:00:00  copies [9839.87, 9964.17]  expected 9815.5  -> mean 9902.02 (both within 10 %)
+[2]     2024-05-13 03:00:00  copies [-5.18, -5.62]  expected 0.0  -> 0 (night)
+[2]     2024-06-04 07:00:00  copies [2282.6, 2128.6]  expected 2678.1  -> NaN (neither within 10 %, daytime)
+[2]     2024-06-06 13:00:00  copies [7969.24, 8466.3]  expected 8086.2  -> mean 8217.77 (both within 10 %)
+[2]     2024-06-11 11:00:00  copies [3891.27, 3835.78]  expected 3723.9  -> mean 3863.53 (both within 10 %)
+[2]     2024-09-13 06:00:00  copies [299.64, 288.82]  expected 465.3  -> NaN (neither within 10 %, daytime)
+[2]     2024-10-12 18:00:00  copies [-4.89, -4.43]  expected 0.0  -> 0 (night)
+[2]     2025-02-06 05:00:00  copies [-10.65, -11.18]  expected 0.0  -> 0 (night)
+[2]     2025-04-06 07:00:00  copies [1870.68, 1977.1]  expected 2192.0  -> kept 1977.10 (one within 10 %)
+[2]     2025-05-26 15:00:00  copies [5341.99, 5875.79]  expected 5248.7  -> kept 5341.99 (one within 10 %)
+[2]     2025-06-30 16:00:00  copies [3700.71, 3505.1]  expected 3777.5  -> mean 3602.90 (both within 10 %)
+[4] 333 positive values in window x1000; median power/POA inside 10.80, outside 10.10 kW per W/m2
+[5] 13 spikes > 10,100 kW -> NaN; 16 values in (10,000, 10,100] -> 10,000
+[6] power flatline 2187.44 kW 2024-09-18 00:00:00..2024-09-19 23:00:00: 48 rows -> NaN
+[6] POA flatline 412.6 W/m2 2024-08-25 00:00:00..2024-08-27 23:00:00: 70 rows -> measured_poa_wm2 NaN (power kept)
+[7] 3282 night-time negative values -> 0
+[11] power / expected > 1.5 with POA > 100: 10 rows (10 isolated single hours; 6 would remain with POA > 200) -> ac_power_kw NaN; listed in reports/ratio_spikes.csv
+[8] status normalised: 1219 values changed; counts {'RUN': 6338, 'STANDBY': 5903, nan: 432, 'PARTIAL': 149, 'STOP': 120}
+[8] excl_stop: 120
+[8] excl_partial: 149
+[8] excl_power_nan: 382
+[8] excl_day_standby: 0
+[8] excl_nan_status_low: 2
+[8] suspect_outage (RUN, POA>300, actual/expected<0.5): 0 -> reports/suspect_outage.csv (not excluded)
+[9] 511 usable days; clean baseline (Jun-Oct median) 11.087 kW per W/m2; soiling_factor range 0.926..1.000, 439 of 547 days < 1
+[9] ac_power_kw / soiling_factor > 10,000 kW on 181 rows -> ac_power_clean capped at 10,000
+
+                                 item  count
+                raw rows in train.csv  12978
+      rows after duplicate resolution  12942
+missing hours (left missing, rule 10)    186
+                      train_ok = True  12290
+                     train_ok = False    652
+                            excl_stop    120
+                         excl_partial    149
+                       excl_power_nan    382
+                     excl_day_standby      0
+                  excl_nan_status_low      2
+                  rows with >1 reason      1
+                suspect_outage (kept)      0
+           train_ok & daylight (el>0)   6199
+
+wrote data/train_clean.parquet (12942 rows, 24 columns)
+
+fitting final model on all training data ...
+B2b: loss 0.886, cloud a=0.56 b=4.4, TL {1: 4.9, 2: 4.85, 3: 4.7, 4: 4.45, 5: 4.35, 6: 5.89, 7: 6.07, 8: 6.31, 9: 5.95, 10: 4.9, 11: 4.85, 12: 4.8}
+M2_clean_fixed: 5688 training rows, 15 leaves, 295 rounds, seeds (42, 43, 44, 45, 46)
+asserts ok: 1488 rows, timestamps identical and ordered, no NaN, range [0.0, 9714.0], 682 night hours all 0
+wrote predictions.csv; test daylight mean: BL50 3848 kW, B2b 3978 kW, M2 3718 kW
+
+Test-period sanity check (BL50 predictions, Jul-Aug 2025) vs actuals Jul-Aug 2024
+
+1. Mean daily energy (MWh/day)
+   month   pred 2025  actual 2024    diff  2024 days  fc cloud 2025  fc cloud 2024
+   Jul          47.3         58.1  -18.6%         23           0.86           0.65
+   Aug          52.7         50.0   +5.4%         13           0.74           0.75
+   Jul+Aug       50.0         55.2   -9.4%         36
+   (2024 actual = ac_power_kw on complete days only: all 24 rows present, every daylight hour train_ok with power; excludes the Aug-2024 STOP week and gap days)
+
+2. Mean daylight power by forecast cloud bucket (kW, sun elevation > 0)
+   bucket     pred 2025  actual 2024    diff  hours 2025  hours 2024   sun el 25/24   cs POA 25/24   P/csPOA 25/24
+   0-0.3           6309         4268  +47.8%          22          23      50/35         637/407        9.91/10.48 
+   0.3-0.7         4718         4803   -1.8%         165         278      42/43         507/513        9.32/9.37  
+   0.7-1           3528         3998  -11.8%         619         423      43/44         511/525        6.91/7.62  
+   all             3848         4316  -10.8%         806         724
+   (2024 actual: train_ok daylight hours with power. P/csPOA = mean power / mean clear-sky POA, kW per W/m2)
+   Overall: test is cloudier (more hours in 0.7-1), so the all-hours mean is lower; the drop is consistent with the cloud mix, not a level shift.
+
+Forecast cloud, daylight mean: test 0.80 vs Jul-Aug 2024 0.70
+
+3. Flags (> 20 % off)
+   - bucket 0-0.3 mean daylight power +47.8% vs 2024. Likely reason: only 22 vs 23 hours and a different time-of-day mix (mean sun elevation 50 vs 35 deg, clear-sky POA 637 vs 407 W/m2). Per unit clear-sky POA the difference is -5.5%.
+
+done in 2 s

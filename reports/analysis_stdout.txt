@@ -1,0 +1,78 @@
+﻿
+=== 1. Sensitivity (not for selection): BL50 turbidity, MAE % vs ac_power_kw ===
+fold                         F1    F2    F8  monsoon mean  bias mean kW
+model          tl                                                      
+B2b            default     4.07  4.04  3.94          4.02         26.01
+               fitted_dry  4.34  4.04  4.12          4.17        207.89
+BL50           default     3.94  3.98  3.80          3.91        -27.07
+               fitted_dry  3.92  3.86  3.84          3.87         47.29
+M2_clean_fixed default     4.13  4.13  3.91          4.06        -80.15
+               fitted_dry  4.13  4.28  4.32          4.24       -113.30
+check F1: BL50 MAE 3.92 %
+check F2: BL50 MAE 3.86 %
+check F8: BL50 MAE 3.84 %
+
+=== 2. Expected test MAE ===
+         test_share  monsoon_folds_share  bl50_mae_pct (mean F1,F2,F8)  bl50_bias_kw (mean F1,F2,F8)  n_hours_folds
+bucket                                                                                                             
+0-0.3         0.027                0.041                         1.638                      -104.206             74
+0.3-0.7       0.205                0.430                         3.376                        51.203            772
+0.7-1         0.768                0.528                         4.537                        89.666            948
+test daylight hours: 806, mean forecast cloud 0.796
+expected test MAE (test cloud mix): 4.22 % of 10 MW; same bucket MAEs at the folds' own mix: 3.92 %
+expected test bias (test cloud mix): +77 kW; at the folds' own mix: +65 kW
+inside 0.7-1:
+sub-bucket  test_share  bl50_mae_pct (pooled)   n
+   0.7-0.8       0.150                  3.966 388
+   0.8-0.9       0.266                  5.086 410
+     0.9-1       0.352                  4.191 150
+
+=== 3. Error analysis, BL50 vs ac_power_kw, F1/F2/F8 ===
+5 worst days (unique dates, by |daily energy error|):
+fold       date  n_hours  mean_fc_cloud  actual_kwh  bl50_kwh  b2b_kwh   m2_kwh  err_kwh  err_pct  kt_mad  kt_meas_minus_fcst       class  err_pct_forecast_part  err_pct_model_part   class_oracle
+  F8 2025-06-23       13           0.63    44850.23  60405.51 62766.89 58044.14 15555.28    34.68    0.21               -0.19 model wrong                  30.58                4.10 forecast wrong
+  F1 2024-08-09       13           0.83    39328.36  52983.08 53825.17 52140.98 13654.72    34.72    0.17               -0.15 model wrong                  33.44                1.28 forecast wrong
+  F1 2024-08-20       13           0.67    44390.64  58039.64 61440.46 54638.81 13649.00    30.75    0.22               -0.15 model wrong                  26.50                3.08 forecast wrong
+  F8 2025-06-22       12           0.78    41646.85  51886.83 54903.16 48870.51 10239.98    24.59    0.16               -0.16 model wrong                  22.18                2.41 forecast wrong
+  F1 2024-08-21       13           0.90    37493.90  47332.08 45881.50 48782.66  9838.18    26.24    0.10               -0.06 model wrong                  23.22                3.02 forecast wrong
+same dates in the other fold:
+fold       date  err_kwh  err_pct
+  F2 2024-08-09  11668.5     29.7
+  F2 2024-08-20  11838.8     26.7
+  F2 2024-08-21   8528.7     22.7
+pre-stated rule counts: {'model wrong': 5}
+oracle-irradiance attribution counts: {'forecast wrong': 5}
+context: share of ALL fold-days with kt MAD > 0.3: 0.0% (median 0.11, max 0.22); forecast-implied clearness range 0.47..1.00
+3 largest single-hour errors (unique hours):
+fold           timestamp  forecast_cloud_cover  kt_meas  kt_fcst  measured_poa_wm2  ac_power_kw     B2b  M2_clean_fixed    BL50  oracle_irr     err
+  F8 2025-06-23 10:00:00                  0.64     0.57     0.92            427.60      4643.20 7380.02         6872.22 7126.12     4610.27 2482.92
+  F1 2024-08-20 12:00:00                  0.71      NaN     0.90               NaN      6101.47 8907.90         7941.39 8424.64         NaN 2323.17
+  F1 2024-08-20 11:00:00                  0.85     0.46     0.74            415.10      4519.22 7162.52         6276.44 6719.48     4528.29 2200.26
+
+=== 4. BL50 error by hour of day, F1/F2/F8 vs ac_power_kw ===
+                   n  mae_pct  bias_kw  mean_actual_kw  b2b_bias_kw  m2_bias_kw  mae_pct_of_mean
+period                                                                                          
+morning (<10)    547      2.5     28.8          2696.2        114.3       -56.7              9.3
+midday (10-13)   558      6.4     84.1          7301.9        358.3      -190.1              8.7
+afternoon (14+)  689      2.9     18.8          3304.2        145.6      -108.1              8.9
+        n  mae_pct  bias_kw  mean_actual_kw  b2b_bias_kw  m2_bias_kw
+hour                                                                
+6     137      0.4      2.2           135.4         14.1        -9.6
+7     134      1.3      4.8          1700.8         62.1       -52.4
+8     136      3.3      2.4          3593.9        108.6      -103.7
+9     140      4.9    103.4          5282.8        268.0       -61.1
+10    138      6.1    102.3          6587.5        344.8      -140.1
+11    139      6.4    122.9          7426.1        402.4      -156.6
+12    140      6.4     55.0          7806.5        340.9      -230.8
+13    141      6.6     56.9          7377.6        345.3      -231.5
+14    141      5.8     80.0          6502.6        339.9      -180.0
+15    138      4.4     12.4          5143.5        200.9      -176.2
+16    138      3.0    -27.1          3345.6         89.0      -143.2
+17    136      1.1     27.5          1345.0         91.4       -36.4
+18    136      0.3     -0.4            38.8         -0.4        -0.4
+bias kW by period and fold:
+fold                F1    F2     F8
+period                             
+morning (<10)     71.0 -16.0   34.0
+midday (10-13)   163.0 -45.0  188.0
+afternoon (14+)   53.0 -10.0    7.0

@@ -1,0 +1,126 @@
+﻿F1 done (tuned M2_clean: leaves=15, iters=306)
+F2 done (tuned M2_clean: leaves=31, iters=144)
+F3 done (tuned M2_clean: leaves=15, iters=1717)
+F4 done (tuned M2_clean: leaves=31, iters=1267)
+F5 done (tuned M2_clean: leaves=31, iters=1057)
+F6 done (tuned M2_clean: leaves=31, iters=113)
+F7 done (tuned M2_clean: leaves=31, iters=74)
+F8 done (tuned M2_clean: leaves=31, iters=245)
+
+mae_pct vs ac_power_kw
+fold              F1    F2    F3    F4    F5    F6    F7    F8  monsoon mean  F3-F8 mean
+model                                                                                   
+B2b             4.34  4.04  2.24  3.50  2.17  3.32  3.52  4.12          4.17        3.15
+M2_clean        4.09  4.33  1.75  3.57  2.00  3.02  2.65  4.44          4.29        2.90
+M2_clean_fixed  4.13  4.28  1.65  3.28  2.02  3.05  2.41  4.32          4.24        2.79
+BL50            3.92  3.86  1.81  3.26  2.06  3.18  2.87  3.84          3.87        2.84
+BL_cloud        3.92  3.96  1.86  3.30  2.04  3.16  2.74  3.98          3.95        2.85
+
+rmse_pct vs ac_power_kw
+fold              F1    F2    F3    F4    F5    F6    F7    F8  monsoon mean  F3-F8 mean
+model                                                                                   
+B2b             6.52  5.92  2.78  4.06  3.03  4.06  4.85  6.37          6.27        4.19
+M2_clean        5.76  6.10  2.37  4.11  2.83  3.79  4.06  6.29          6.05        3.91
+M2_clean_fixed  5.79  6.03  2.26  3.85  2.83  3.82  3.86  5.99          5.93        3.77
+BL50            5.70  5.47  2.33  3.89  2.91  3.93  4.29  5.73          5.63        3.85
+BL_cloud        5.61  5.57  2.39  3.87  2.88  3.90  4.15  5.74          5.64        3.82
+
+bias_kw vs ac_power_kw
+fold                F1      F2      F3      F4      F5      F6      F7      F8  monsoon mean  F3-F8 mean
+model                                                                                                   
+B2b             253.07  135.76   38.75  270.77  181.24  321.16  330.37  234.83        207.89      229.52
+M2_clean        -61.58 -192.27  117.88  356.95  159.27  289.88  228.30  -54.69       -102.85      182.93
+M2_clean_fixed  -67.69 -180.78  112.64  327.65  165.81  292.53  183.98  -91.42       -113.30      165.20
+BL50             92.69  -22.51   75.69  299.21  173.52  306.85  257.17   71.70         47.29      197.36
+BL_cloud         30.26  -84.81   60.19  286.60  168.00  304.69  238.46    3.85        -16.90      176.96
+
+daily_energy_err_pct vs ac_power_kw
+fold              F1    F2    F3    F4    F5    F6    F7    F8  monsoon mean  F3-F8 mean
+model                                                                                   
+B2b             9.19  8.32  1.76  4.54  3.21  6.16  6.72  8.16          8.56        5.09
+M2_clean        8.18  8.94  2.70  5.98  3.05  5.56  4.97  9.29          8.80        5.26
+M2_clean_fixed  8.24  8.75  2.56  5.49  3.12  5.61  4.57  8.91          8.63        5.04
+BL50            8.02  7.72  2.10  5.02  3.16  5.88  5.39  7.58          7.77        4.86
+BL_cloud        7.87  7.82  1.95  4.80  3.10  5.84  5.12  8.11          7.93        4.82
+
+mae_pct vs ac_power_clean
+fold              F1    F2    F3    F4    F5    F6    F7    F8  monsoon mean  F3-F8 mean
+model                                                                                   
+B2b             4.36  4.07  1.72  1.72  0.96  1.05  2.52  4.23          4.22        2.03
+M2_clean        4.16  4.41  0.92  0.97  1.02  0.97  1.79  4.60          4.39        1.71
+M2_clean_fixed  4.19  4.36  0.88  1.09  0.96  0.98  1.73  4.49          4.34        1.69
+BL50            3.97  3.92  1.21  1.34  0.92  0.99  1.98  3.99          3.96        1.74
+BL_cloud        3.96  4.03  1.31  1.46  0.95  1.01  1.90  4.14          4.04        1.79
+
+rmse_pct vs ac_power_clean
+fold              F1    F2    F3    F4    F5    F6    F7    F8  monsoon mean  F3-F8 mean
+model                                                                                   
+B2b             6.51  5.93  2.25  2.36  1.69  1.63  4.12  6.39          6.28        3.08
+M2_clean        5.83  6.18  1.43  1.60  1.67  1.54  3.39  6.39          6.13        2.67
+M2_clean_fixed  5.85  6.11  1.28  1.76  1.66  1.53  3.28  6.11          6.03        2.60
+BL50            5.73  5.52  1.54  1.96  1.63  1.55  3.61  5.81          5.69        2.68
+BL_cloud        5.65  5.64  1.69  2.04  1.65  1.56  3.47  5.84          5.71        2.71
+
+bias_kw vs ac_power_clean
+fold                F1      F2     F3     F4     F5     F6      F7      F8  monsoon mean  F3-F8 mean
+model                                                                                               
+B2b             243.81  126.50 -79.34 -55.01 -33.73  43.65  216.04  209.27        193.19       50.14
+M2_clean        -70.84 -201.53  -0.21  31.16 -55.70  12.37  113.96  -80.25       -117.54        3.56
+M2_clean_fixed  -76.95 -190.04  -5.45   1.87 -49.16  15.02   69.64 -116.98       -127.99      -14.18
+BL50             83.43  -31.77 -42.40 -26.57 -41.45  29.33  142.84   46.14         32.60       17.98
+BL_cloud         21.00  -94.07 -57.90 -39.19 -46.96  27.17  124.12  -21.71        -31.60       -2.41
+
+daily_energy_err_pct vs ac_power_clean
+fold              F1    F2    F3    F4    F5    F6    F7    F8  monsoon mean  F3-F8 mean
+model                                                                                   
+B2b             9.19  8.42  1.61  1.99  1.22  1.32  4.40  8.35          8.66        3.15
+M2_clean        8.31  9.13  1.05  1.31  1.43  1.34  3.02  9.63          9.02        2.96
+M2_clean_fixed  8.36  8.94  1.00  1.52  1.28  1.36  2.94  9.26          8.85        2.89
+BL50            8.11  7.83  1.19  1.68  1.23  1.30  3.33  7.91          7.95        2.77
+BL_cloud        7.98  8.00  1.33  1.80  1.29  1.35  3.21  8.44          8.14        2.90
+
+=== Summary ===
+               monsoon (F1,F2,F8) vs kw                                       F3-F8 vs clean                                      
+                                mae_pct rmse_pct bias_kw daily_energy_err_pct        mae_pct rmse_pct bias_kw daily_energy_err_pct
+model                                                                                                                             
+B2b                                4.17     6.27  207.89                 8.56           2.03     3.08   50.14                 3.15
+M2_clean                           4.29     6.05 -102.85                 8.80           1.71     2.67    3.56                 2.96
+M2_clean_fixed                     4.24     5.93 -113.30                 8.63           1.69     2.60  -14.18                 2.89
+BL50                               3.87     5.63   47.29                 7.77           1.74     2.68   17.98                 2.77
+BL_cloud                           3.95     5.64  -16.90                 7.93           1.79     2.71   -2.41                 2.90
+
+monsoon mean (F1,F2,F8) by forecast cloud bucket, vs ac_power_kw:
+               mae_pct                     bias_kw                         daily_energy_err_pct                     
+bucket           0-0.3 0.3-0.7 0.7-1   all   0-0.3 0.3-0.7   0.7-1     all                0-0.3 0.3-0.7  0.7-1   all
+model                                                                                                               
+B2b               1.65    3.66  4.98  4.17  -75.33  244.78  239.86  207.89                 2.45    7.58  10.59  8.56
+M2_clean          1.48    3.91  4.86  4.29  -94.15 -123.31  -58.77 -102.85                 2.27    7.79  10.40  8.80
+M2_clean_fixed    1.78    3.89  4.71  4.24 -133.09 -142.38  -60.52 -113.30                 2.55    7.76   9.67  8.63
+BL50              1.64    3.38  4.54  3.87 -104.21   51.20   89.67   47.29                 2.50    6.83   9.18  7.77
+BL_cloud          1.75    3.48  4.53  3.95 -104.85  -25.70   29.59  -16.90                 2.50    6.99   9.20  7.93
+
+F3-F8 mean by forecast cloud bucket, vs ac_power_clean:
+               mae_pct                     bias_kw                       
+bucket           0-0.3 0.3-0.7 0.7-1   all   0-0.3 0.3-0.7   0.7-1    all
+model                                                                    
+B2b               1.36    2.52  4.25  2.03  -61.30  118.61  -49.17  50.14
+M2_clean          0.84    2.35  4.05  1.71  -24.42   17.05  -83.85   3.56
+M2_clean_fixed    0.94    2.31  4.19  1.69  -42.83    1.22 -146.81 -14.18
+BL50              1.11    2.26  4.07  1.74  -52.07   59.92  -97.99  17.98
+BL_cloud          1.23    2.24  4.07  1.79  -60.62   37.03 -117.52  -2.41
+
+stability, MAE % (F1/F2 vs kw, F3-F8 vs clean):
+model  M2_clean  M2_clean_fixed  diff (fixed - tuned)
+fold                                                 
+F1        4.095           4.129                 0.034
+F2        4.331           4.278                -0.053
+F3        0.923           0.876                -0.047
+F4        0.970           1.087                 0.117
+F5        1.018           0.958                -0.061
+F6        0.971           0.976                 0.004
+F7        1.794           1.727                -0.067
+F8        4.598           4.488                -0.110
+
+Decision rule: best monsoon-mean MAE = 3.874 (BL50); candidates within 0.1: ['BL50', 'BL_cloud']; simplest -> BL50
+
+wrote reports/final_choice.csv, reports/final_choice_summary.csv, reports/final_choice_params.json
